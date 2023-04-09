@@ -1,0 +1,420 @@
+타이타닉 데이터 분석
+
+김영인
+
+### 데이터 불러오기
+
+필요한 라이브러리인 numpy와 pandas를 import해준다.\
+데이터 파일을 코드와 같은 디렉토리에 다운받고 pd.read_csv를 이용하여 불러와준다.
+
+
+```python
+import pandas as pd
+import numpy as np
+
+train = pd.read_csv('train.csv')
+test = pd.read_csv('test.csv')
+```
+
+train.head()를 실행시켜 데이터가 제대로 불러와졌는지 확인해본다.
+
+
+```python
+train.head()
+```
+
+### 데이터 분석
+
+Data Dictionary를 살펴보면 승객 데이터에서 제공되는 특성은 10가지가 있는데, 그 중에서 의미를 바로 알기 힘든 것 들을 살펴보자.
+
+Survivied는 생존 여부 (0은 사망, 1은 생존; train 데이터에서만 제공),
+Pclass는 사회경제적 지위(1에 가까울 수록 높음),
+SipSp는 배우자나 형제 자매 명 수의 총 합,
+Parch는 부모 자식 명 수의 총 합을 나타낸다.
+
+주어진 데이터에서 대해 간략하게 살펴보자.
+
+
+```python
+print('train data shape: ', train.shape)
+print('test data shape: ', test.shape)
+print('----------[train infomation]----------')
+print(train.info())
+print('----------[test infomation]----------')
+print(test.info())
+```
+
+Output:
+
+
+```python
+train data shape:  (891, 12)
+test data shape:  (418, 11)
+----------[train infomation]----------
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 891 entries, 0 to 890
+Data columns (total 12 columns):
+PassengerId    891 non-null int64
+Survived       891 non-null int64
+Pclass         891 non-null int64
+Name           891 non-null object
+Sex            891 non-null object
+Age            714 non-null float64
+SibSp          891 non-null int64
+Parch          891 non-null int64
+Ticket         891 non-null object
+Fare           891 non-null float64
+Cabin          204 non-null object
+Embarked       889 non-null object
+dtypes: float64(2), int64(5), object(5)
+memory usage: 83.6+ KB
+None
+----------[test infomation]----------
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 418 entries, 0 to 417
+Data columns (total 11 columns):
+PassengerId    418 non-null int64
+Pclass         418 non-null int64
+Name           418 non-null object
+Sex            418 non-null object
+Age            332 non-null float64
+SibSp          418 non-null int64
+Parch          418 non-null int64
+Ticket         418 non-null object
+Fare           417 non-null float64
+Cabin          91 non-null object
+Embarked       418 non-null object
+dtypes: float64(2), int64(4), object(5)
+memory usage: 36.0+ KB
+None
+```
+
+이제 위에서 살펴본 특성들이 생존에 미치는 영향에 대해서 생각해보자.
+
+먼저 데이터 값의 분포를 보기 위해서 라이브러리를 불러오자.
+
+
+```python
+import matplotlib.pyplot as plt
+%matplotlib inline
+import seaborn as sns
+sns.set() # setting seaborn default for plots
+```
+
+### 데이터 전처리 및 특성 추출
+
+우리가 선택할 특성은 Name, Sex, Embarked, Age, SibSp, Parch, Fare, Pclass 이다. 
+
+데이터 전처리를 하는 과정에서는 train과 test 데이터를 같은 방법으로 한 번에 처리를 해야하므로 먼저 두 개의 데이터를 합쳐준다..
+
+
+```python
+train_and_test = [train, test]
+```
+
+이름을 통해 결혼의 유무를 알 수 있다. 
+이름에서 Title을 가져오도록 하자.
+
+
+```python
+for dataset in train_and_test:
+​	dataset['Title'] = dataset.Name.str.extract(' ([A-Za-z]+)\.')
+
+train.head(5)
+```
+
+추출한 Title을 가진 사람이 몇 명이 존재하는지 성별과 함께 표현해준다
+
+
+```python
+pd.crosstab(train['Title'], train['Sex'])
+```
+여기에서 흔하지 않은 Title은 Other로 대체하고 중복되는 표현을 통일하자.
+
+```python
+for dataset in train_and_test:
+​    dataset['Title'] = dataset['Title'].replace(['Capt', 'Col', 'Countess', 'Don','Dona', 'Dr', 'Jonkheer',
+​                                                 'Lady','Major', 'Rev', 'Sir'], 'Other')
+​    dataset['Title'] = dataset['Title'].replace('Mlle', 'Miss')
+​    dataset['Title'] = dataset['Title'].replace('Mme', 'Mrs')
+​    dataset['Title'] = dataset['Title'].replace('Ms', 'Miss')
+
+train[['Title', 'Survived']].groupby(['Title'], as_index=False).mean()
+```
+
+추출한 Title 데이터를 학습하기 알맞게 String Data로 변형해주면 된다.
+
+
+```python
+for dataset in train_and_test:
+​    dataset['Title'] = dataset['Title'].astype(str)
+```
+
+ 승객의 성별을 나타내는 Sex Feature를 처리할 것인데 이미 male과 female로 나뉘어져 있으므로 String Data로만 변형해준다.
+
+
+```python
+for dataset in train_and_test:
+​    dataset['Sex'] = dataset['Sex'].astype(str)
+```
+
+배를 탑승한 선착장을 나타내는 Embarked Feature를 처리해보자.
+
+train 데이터에서 Embarked feature에는 NaN 값이 존재하며, 다음을 보면 잘 알 수 있다.
+
+
+```python
+train.Embared.value_count(dropna=False)
+```
+
+Output:
+
+
+```python
+S      644
+C      168
+Q       77
+NaN      2
+Name: Embarked, dtype: int64
+```
+
+value_count()에서 dropna를 False로 해주면 NaN 값을 포함한 갯수의 총합을 세준다.
+
+
+```python
+for dataset in train_and_test:
+​    dataset['Embarked'] = dataset['Embarked'].fillna('S')
+​    dataset['Embarked'] = dataset['Embarked'].astype(str)
+```
+
+Age Feature에도 NaN값은 존재하는데, 일단 빠진 값에는 나머지 모든 승객 나이의 평균을 넣어준다.
+이번에는 pd.cut()을 이용해 같은 길이의 구간을 가지는 다섯 개의 그룹을 만들어 보자.
+
+
+```python
+for dataset in train_and_test:
+​    dataset['Age'].fillna(dataset['Age'].mean(), inplace=True)
+​    dataset['Age'] = dataset['Age'].astype(int)
+​    train['AgeBand'] = pd.cut(train['Age'], 5)
+print (train[['AgeBand', 'Survived']].groupby(['AgeBand'], as_index=False).mean())
+```
+
+Output:
+
+
+```python
+​         AgeBand  Survived
+0  (-0.08, 16.0]  0.550000
+1   (16.0, 32.0]  0.344762
+2   (32.0, 48.0]  0.403226
+3   (48.0, 64.0]  0.434783
+4   (64.0, 80.0]  0.090909
+```
+
+이제 Age에 들어 있는 값을 위에서 구한 구간에 속하도록 바꿔준다.
+
+
+```python
+for dataset in train_and_test:
+​    dataset.loc[ dataset['Age'] <= 16, 'Age'] = 0
+​    dataset.loc[(dataset['Age'] > 16) & (dataset['Age'] <= 32), 'Age'] = 1
+​    dataset.loc[(dataset['Age'] > 32) & (dataset['Age'] <= 48), 'Age'] = 2
+​    dataset.loc[(dataset['Age'] > 48) & (dataset['Age'] <= 64), 'Age'] = 3
+​    dataset.loc[ dataset['Age'] > 64, 'Age'] = 4
+​    dataset['Age'] = dataset['Age'].map( { 0: 'Child',  1: 'Young', 2: 'Middle', 3: 'Prime', 4: 'Old'} ).astype(str)
+```
+
+
+```python
+Age값을 numeric이 아닌 string 형식으로 넣어주었다.
+```
+
+Test 데이터 중에서 Fare Feature에도 NaN 값이 하나 존재하는데,
+Fare 데이터가 빠진 값의 Pclass를 가진 사람들의 평균 Fare를 넣어주는 식으로 처리를 해보자.
+
+
+```python
+print (train[['Pclass', 'Fare']].groupby(['Pclass'], as_index=False).mean())
+print("")
+print(test[test["Fare"].isnull()]["Pclass"])
+```
+
+Output:
+
+
+```python
+ Pclass       Fare
+0       1  84.154687
+1       2  20.662183
+2       3  13.675550
+
+152    3
+Name: Pclass, dtype: int64
+```
+
+위에서 볼 수 있듯이 누락된 데이터의 Pclass는 3이고, train 데이터에서 Pclass가 3인 사람들의 평균 Fare가 13.675550이므로 이 값을 넣어주자.
+
+
+```python
+for dataset in train_and_test:
+​    dataset['Fare'] = dataset['Fare'].fillna(13.675)
+```
+
+이번에는 Age에서 했던 것 과는 다르게 Numeric한 값으로 남겨두자.
+
+
+```python
+for dataset in train_and_test:
+​    dataset.loc[ dataset['Fare'] <= 7.854, 'Fare'] = 0
+​    dataset.loc[(dataset['Fare'] > 7.854) & (dataset['Fare'] <= 10.5), 'Fare'] = 1
+​    dataset.loc[(dataset['Fare'] > 10.5) & (dataset['Fare'] <= 21.679), 'Fare']   = 2
+​    dataset.loc[(dataset['Fare'] > 21.679) & (dataset['Fare'] <= 39.688), 'Fare']   = 3
+​    dataset.loc[ dataset['Fare'] > 39.688, 'Fare'] = 4
+​    dataset['Fare'] = dataset['Fare'].astype(int)
+```
+
+위에서 살펴봤듯이 형제, 자매, 배우자, 부모님, 자녀의 수가 많을 수록 생존한 경우가 많았는데, 두 개의 Feature를 합쳐서 Family라는 Feature로 만들자.
+
+
+```python
+for dataset in train_and_test:
+​    dataset["Family"] = dataset["Parch"] + dataset["SibSp"]
+​    dataset['Family'] = dataset['Family'].astype(int)
+```
+
+사용할 Feature에 대해서는 전처리가 되었으니, 학습시킬때 제외시킬 Feature들을 Drop 시키자.
+
+
+```python
+features_drop = ['Name', 'Ticket', 'Cabin', 'SibSp', 'Parch']
+train = train.drop(features_drop, axis=1)
+test = test.drop(features_drop, axis=1)
+train = train.drop(['PassengerId', 'AgeBand', 'FareBand'], axis=1)
+
+print(train.head())
+print(test.head())
+```
+
+Output:
+
+
+```python
+   Survived  Pclass     Sex     Age  Fare Embarked Title  Family
+0         0       3    male   Young     0        S    Mr       1
+1         1       1  female  Middle     4        C   Mrs       1
+2         1       3  female   Young     1        S  Miss       0
+3         1       1  female  Middle     4        S   Mrs       1
+4         0       3    male  Middle     1        S    Mr       0
+   PassengerId  Pclass     Sex     Age  Fare Embarked Title  Family
+0          892       3    male  Middle     0        Q    Mr       0
+1          893       3  female  Middle     0        S   Mrs       1
+2          894       2    male   Prime     1        Q    Mr       0
+3          895       3    male   Young     1        S    Mr       0
+4          896       3  female   Young     2        S   Mrs       2
+```
+
+가공된 train, test 데이터를 볼 수 있다.
+
+Categorical Feature에 대해 one-hot encoding과 train data와 label을 분리시키는 작업을 하면 예측 모델에 학습시킬 준비가 끝났다.
+
+
+```python
+train = pd.get_dummies(train)
+test = pd.get_dummies(test)
+
+train_label = train['Survived']
+train_data = train.drop('Survived', axis=1)
+test_data = test.drop("PassengerId", axis=1).copy()
+```
+
+### 모델 설계 및 학습
+
+이번에 사용할 예측 모델은 다음과 같이 5가지가 있다.
+
+Logistic Regression
+Support Vector Machine (SVM)
+k-Nearest Neighbor (kNN)
+Random Forest
+Naive Bayes
+
+일단 위 모델을 사용하기 위해서 필요한 scikit-learn 라이브러리를 불러오자.
+
+
+```python
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+
+from sklearn.utils import shuffle
+```
+
+학습시키기 전에는 주어진 데이터가 정렬되어있어 학습에 방해가 될 수도 있으므로 섞어주도록 하자.
+
+
+```python
+train_data, train_label = shuffle(train_data, train_label, random_state = 5)
+```
+
+모델 학습과 평가에 대한 pipeline을 만들어준다.
+
+scikit-learn에서 제공하는 fit()과 predict()를 사용하면 매우 간단하게 학습과 예측을 할 수 있어서 그냥 하나의 함수만 만들면 편하게 사용가능하다.
+
+
+```python
+def train_and_test(model):
+​    model.fit(train_data, train_label)
+​    prediction = model.predict(test_data)
+​    accuracy = round(model.score(train_data, train_label) * 100, 2)
+​    print("Accuracy : ", accuracy, "%")
+​    return prediction
+```
+
+이 함수에 다섯가지 모델을 넣어주면 학습과 평가가 완료된다.
+
+
+```python
+# Logistic Regression
+log_pred = train_and_test(LogisticRegression())
+# SVM
+svm_pred = train_and_test(SVC())
+#kNN
+knn_pred_4 = train_and_test(KNeighborsClassifier(n_neighbors = 4))
+# Random Forest
+rf_pred = train_and_test(RandomForestClassifier(n_estimators=100))
+# Navie Bayes
+nb_pred = train_and_test(GaussianNB())
+```
+
+Output:
+
+
+```python
+Accuracy :  82.72 %
+Accuracy :  83.5 %
+Accuracy :  85.41 %
+Accuracy :  88.55 %
+Accuracy :  79.8 %
+```
+
+### 마무리
+
+위에서 볼 수 있듯 4번째 모델인 Random Forest에서 가장 높은 정확도(88.55%)를 보였는데, 이 모델을 채택해서 submission 해보자.
+
+
+```python
+submission = pd.DataFrame({
+​    "PassengerId": test["PassengerId"],
+​    "Survived": rf_pred
+})
+
+submission.to_csv('submission_rf.csv', index=False)
+```
+
+Kaggle에 업로드시켜 보면 다음과 같은 결과가 나타난다.
+
+
+```python
+![nn](C:\Users\xkrdu\Desktop/rjlo.png)
+```
